@@ -167,18 +167,27 @@ async fn main() {
         SkillSet::load(&skill_dirs).expect("Failed to load skills")
     };
 
-    let make_model_config = |m: &str| ModelConfig {
-        id: m.to_string(),
-        name: m.to_string(),
-        api: ApiProtocol::OpenAiCompletions,
-        provider: cfg.provider.name.clone(),
-        base_url: cfg.provider.api_url.clone().unwrap_or_else(|| "https://openrouter.ai/api/v1".into()),
-        reasoning: false,
-        context_window: 128_000,
-        max_tokens: 4096,
-        cost: yoagent::provider::CostConfig::default(),
-        headers: std::collections::HashMap::new(),
-        compat: Some(OpenAiCompat::openrouter()),
+    let make_model_config = |m: &str| {
+        let mut headers = std::collections::HashMap::new();
+        // Client identification for all providers
+        headers.insert("User-Agent".into(), format!("yoyo/{}", env!("CARGO_PKG_VERSION")));
+        // OpenRouter-specific referer
+        if cfg.provider.name == "openrouter" {
+            headers.insert("HTTP-Referer".into(), "https://github.com/yologdev/yoyo-evolve".into());
+        }
+        ModelConfig {
+            id: m.to_string(),
+            name: m.to_string(),
+            api: ApiProtocol::OpenAiCompletions,
+            provider: cfg.provider.name.clone(),
+            base_url: cfg.provider.api_url.clone().unwrap_or_else(|| "https://openrouter.ai/api/v1".into()),
+            reasoning: false,
+            context_window: 128_000,
+            max_tokens: 4096,
+            cost: yoagent::provider::CostConfig::default(),
+            headers,
+            compat: Some(OpenAiCompat::openrouter()),
+        }
     };
 
     let mut agent = Agent::new(OpenAiCompatProvider)
