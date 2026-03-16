@@ -334,6 +334,10 @@ async fn run_prompt(agent: &mut Agent, input: &str) {
     let mut in_text = false;
     let mut tool_calls: usize = 0;
     let mut text_chars: usize = 0;
+    
+    // Track file states for diff preview
+    let mut pending_edit_path: Option<String> = None;
+    let mut original_content: Option<String> = None;
 
     while let Some(event) = rx.recv().await {
         match event {
@@ -363,6 +367,9 @@ async fn run_prompt(agent: &mut Agent, input: &str) {
                     }
                     "edit_file" => {
                         let path = args.get("path").and_then(|v| v.as_str()).unwrap_or("?");
+                        // Capture original content for diff before editing
+                        pending_edit_path = Some(path.to_string());
+                        original_content = std::fs::read_to_string(path).ok();
                         format!("edit {}", path)
                     }
                     "list_files" => {
@@ -383,6 +390,16 @@ async fn run_prompt(agent: &mut Agent, input: &str) {
                     println!(" {RED}✗{RESET}");
                 } else {
                     println!(" {GREEN}✓{RESET}");
+                }
+                // Show diff preview for edit_file operations
+                if !is_error {
+                    if let (Some(path), Some(original)) = (pending_edit_path.take(), original_content.take()) {
+                        if let Ok(new_content) = std::fs::read_to_string(&path) {
+                            if original != new_content {
+                                print_diff(&original, &new_content, &path);
+                            }
+                        }
+                    }
                 }
             }
             AgentEvent::MessageUpdate {
@@ -432,6 +449,45 @@ fn truncate(s: &str, max: usize) -> &str {
         Some((idx, _)) => &s[..idx],
         None => s,
     }
+}
+
+/// Print a readable diff between original and modified content
+fn print_diff(old_text: &str, new_text: &str, path: &str) {
+    let old_lines: Vec<&str> = old_text.lines().collect();
+    let new_lines: Vec<&str> = new_text.lines().collect();
+    
+    println!("\n{DIM}─── diff {path} ───{RESET}");
+    
+    // Simple line-by-line comparison with context
+    let max_lines = old_lines.len().max(new_lines.len()).min(50); // Limit to 50 lines
+    
+    for i in 0..max_lines {
+        let old_line = old_lines.get(i);
+        let new_line = new_lines.get(i);
+        
+        match (old_line, new_line) {
+            (Some(o), Some(n)) if o == n => {
+                println!("  {}{}{}", CYAN, n, RESET);
+            }
+            (Some(o), Some(n)) => {
+                println!("{}-{}", RED, truncate(o, 100));
+                println!("{}+{}", GREEN, truncate(n, 100));
+            }
+            (Some(o), None) => {
+                println!("{}-{}", RED, truncate(o, 100));
+            }
+            (None, Some(n)) => {
+                println!("{}+{}", GREEN, truncate(n, 100));
+            }
+            _ => {}
+        }
+    }
+    
+    if old_lines.len() > 50 || new_lines.len() > 50 {
+        println!("{DIM}  ... (truncated){RESET}");
+    }
+    
+    println!("{DIM}─── end diff ───{RESET}\n");
 }
 
 #[cfg(test)]
@@ -491,5 +547,30 @@ mod tests {
         let usage = Usage::default();
         // Should not panic - verify it handles cumulative tokens
         print_usage(&usage, 1);
+    }
+    
+    // print_diff just prints to stdout, verify it doesn't panic
+    #[test]
+    fn test_print_diff_identical() {
+        // Identical content - should just print without error
+        print_diff("hello\nworld", "hello\nworld", "test.txt");
+    }
+    
+    #[test]
+    fn test_print_diff_added_lines() {
+        // New content has more lines
+        print_diff("hello\nworld", "hello\nworld\nfoo\nbar", "test.txt");
+    }
+    
+    #[test]
+    fn test_print_diff_removed_lines() {
+        // New content has fewer lines
+        print_diff("hello\nworld\nfoo\nbar", "hello\nworld", "test.txt");
+    }
+    
+    #[test]
+    fn test_print_diff_modified() {
+        // Content is modified
+        print_diff("hello\nworld", "hello\nuniverse", "test.txt");
     }
 }

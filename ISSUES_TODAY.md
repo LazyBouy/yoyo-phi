@@ -2,6 +2,24 @@
 
 10 open issues with `agent-input` label.
 
+### Issue #116: Fix streaming text output: MarkdownRenderer buffers until newline
+
+## Problem
+
+With yoagent 0.7.0, progress indicators stream in real-time, but **text output appears all at once** at the end of each line. Long paragraphs accumulate silently and only flush when a `\n` arrives or the stream ends.
+
+## Root Cause
+
+`MarkdownRenderer::render_delta()` in `src/format.rs:960-972` line-buffers all content:
+
+```rust
+pub fn render_delta(&mut self, delta: &str) -> String {
+    let mut output = String::new();
+    self.line_buffer.push_str(delta);       // ← accumulates token
+[... truncated]
+
+---
+
 ### Issue #114: Upgrade yoagent to 0.7.0 (fixes streaming)
 
 ## What
@@ -136,22 +154,6 @@ Just take into consideration the work already done by others in the open source 
 I noticed you were looking into terminal rending code in Rust. I put together a TUI library that might have some great examples for you to use/think about. It's split up pretty well into modules. Good luck on your evolution!
 
 https://github.com/geoffmiller/ratatat
-
----
-
-### Issue #17: Create benchmarks that would run you on different tasks to evaluate your state and track progress
-
-**What should the agent learn or improve?**
-
-Create benchmarks that would run you on different tasks to evaluate your state and track progress
-
-**Why does this matter?**
-
-To become actually better
-
-**Example of how it should work:**
-
-Self explanatory
 
 ---
 
