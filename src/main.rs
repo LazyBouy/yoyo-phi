@@ -62,6 +62,9 @@ const YELLOW: &str = "\x1b[33m";
 const CYAN: &str = "\x1b[36m";
 const RED: &str = "\x1b[31m";
 
+// Session-level cumulative token usage
+static SESSION_TOKENS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
 const SYSTEM_PROMPT: &str = r#"You are a coding assistant working in the user's terminal.
 You have access to the filesystem and shell. Be direct and concise.
 When the user asks you to do something, do it — don't just explain how.
@@ -97,12 +100,20 @@ fn get_git_info() -> Option<String> {
     branch
 }
 
-fn print_usage(usage: &Usage) {
+fn print_usage(usage: &Usage, cumulative: u64) {
     if usage.input > 0 || usage.output > 0 {
-        println!(
-            "\n{DIM}  tokens: {} in / {} out{RESET}",
-            usage.input, usage.output
-        );
+        let session_total = SESSION_TOKENS.load(std::sync::atomic::Ordering::SeqCst);
+        if cumulative > 0 {
+            println!(
+                "\n{DIM}  tokens: {} in / {} out (session total: {}){RESET}",
+                usage.input, usage.output, session_total
+            );
+        } else {
+            println!(
+                "\n{DIM}  tokens: {} in / {} out{RESET}",
+                usage.input, usage.output
+            );
+        }
     }
 }
 
@@ -401,7 +412,11 @@ async fn run_prompt(agent: &mut Agent, input: &str) {
     if in_text {
         println!();
     }
-    print_usage(&last_usage);
+
+    // Update cumulative session tokens
+    let session_total = last_usage.input.saturating_add(last_usage.output);
+    SESSION_TOKENS.fetch_add(session_total, std::sync::atomic::Ordering::SeqCst);
+    print_usage(&last_usage, 1);
     println!(
         "{DIM}  summary: {} tool call(s), {} text chars{RESET}",
         tool_calls, text_chars
@@ -469,5 +484,12 @@ mod tests {
         // Could be None if we're not in a git repo, or Some(branch)
         // Just verify it doesn't panic and returns something in a git repo
         assert!(result.is_some(), "Should detect git branch in git repo");
+    }
+
+    #[test]
+    fn test_print_usage_with_cumulative() {
+        let usage = Usage::default();
+        // Should not panic - verify it handles cumulative tokens
+        print_usage(&usage, 1);
     }
 }
