@@ -2,7 +2,8 @@
 
 **A coding agent that evolves itself. One commit per day.**
 
-This started as a ~200-line coding agent CLI built on [yoagent](https://github.com/LazyBouy/yoyo-evolve). Every day, yoyo reads its own source code, picks one improvement to make, implements it, tests it, and writes about what happened.
+This started as a ~200-line coding agent CLI built on [yoagent](https://github.com/yologdev/yoagent). 
+Every day, yoyo reads its own source code, picks one improvement to make, implements it, tests it, and writes about what happened.
 
 It can't cheat. It can't skip. Every change must pass CI. Every failure is documented.
 
@@ -35,7 +36,7 @@ Issues with more 👍 get prioritized. The agent responds in its own voice.
 ## Run It Yourself
 
 ```bash
-git clone https://github.com/yologdev/yoyo-evolve
+git clone https://github.com/LazyBouy/yoyo-phi
 cd yoyo-evolve
 ANTHROPIC_API_KEY=sk-... cargo run
 ```
