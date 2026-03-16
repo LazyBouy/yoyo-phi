@@ -6,13 +6,15 @@
 #
 # Environment:
 #   ANTHROPIC_API_KEY  — required
-#   REPO               — GitHub repo (default: yologdev/yoyo-evolve)
+#   REPO               — GitHub repo to push to (default: LazyBouy/yoyo-phi)
+#   ISSUES_REPO        — GitHub repo to fetch issues from (default: yologdev/yoyo-evolve)
 #   MODEL              — LLM model (default: claude-opus-4-6)
 #   TIMEOUT            — Max session time in seconds (default: 600)
 
 set -euo pipefail
 
-REPO="${REPO:-yologdev/yoyo-evolve}"
+REPO="${REPO:-LazyBouy/yoyo-phi}"
+ISSUES_REPO="${ISSUES_REPO:-yologdev/yoyo-evolve}"
 MODEL="${MODEL:-claude-opus-4-6}"
 TIMEOUT="${TIMEOUT:-600}"
 DAY=$(cat DAY_COUNT 2>/dev/null || echo 1)
@@ -42,7 +44,7 @@ echo ""
 ISSUES_FILE="ISSUES_TODAY.md"
 echo "→ Fetching community issues..."
 if command -v gh &>/dev/null; then
-    gh issue list --repo "$REPO" \
+    gh issue list --repo "$ISSUES_REPO" \
         --state open \
         --label "agent-input" \
         --limit 10 \
@@ -168,7 +170,7 @@ if [ -f ISSUE_RESPONSE.md ]; then
     
     if [ -n "$ISSUE_NUM" ] && command -v gh &>/dev/null; then
         gh issue comment "$ISSUE_NUM" \
-            --repo "$REPO" \
+            --repo "$ISSUES_REPO" \
             --body "🤖 **Day $DAY**
 
 $COMMENT
@@ -176,7 +178,7 @@ $COMMENT
 Commit: $(git rev-parse --short HEAD)" || true
 
         if [ "$STATUS" = "fixed" ]; then
-            gh issue close "$ISSUE_NUM" --repo "$REPO" || true
+            gh issue close "$ISSUE_NUM" --repo "$ISSUES_REPO" || true
             echo "  Closed issue #$ISSUE_NUM"
         else
             echo "  Commented on issue #$ISSUE_NUM (status: $STATUS)"
