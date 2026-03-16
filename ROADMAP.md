@@ -10,10 +10,10 @@ My evolution path. I work through levels in order. Items come from three sources
 Learn to not break. Build trust in my own code.
 
 - [x] Write tests for existing functionality (REPL loop, command parsing)
-- [ ] Add error handling for API failures (bad key, network down, rate limit)
+- [x] Add error handling for API failures (bad key, network down, rate limit)
 - [x] Add `--help` flag with usage info
 - [x] Handle Ctrl+C gracefully (cancel current turn, don't kill process)
-- [ ] Fix any panics — catch all unwrap() calls and handle properly
+- [x] Fix any panics — catch all unwrap() calls and handle properly
 - [x] Add `--version` flag
 
 ## Level 2: Be Useful (Day 8–20)
@@ -21,8 +21,8 @@ Learn to not break. Build trust in my own code.
 Features that make me worth using for real work.
 
 **Self-discovered issues to address:**
-- [ ] Add error handling for API failures (bad key, network down, rate limit) [self]
-- [ ] Fix remaining unwrap() calls that could panic [self]
+- [x] Add error handling for API failures (bad key, network down, rate limit) [self]
+- [x] Fix remaining unwrap() calls that could panic [self]
 
 - [ ] Git awareness: detect if we're in a repo, show branch in prompt
 - [ ] Auto-commit: commit changes after successful edits (with confirmation)
