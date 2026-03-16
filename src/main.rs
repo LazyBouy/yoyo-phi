@@ -15,6 +15,8 @@
 
 use serde::Deserialize;
 use std::io::{self, BufRead, Write};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use yoagent::agent::Agent;
 use yoagent::provider::{ApiProtocol, ModelConfig, OpenAiCompat, OpenAiCompatProvider};
 use yoagent::skills::SkillSet;
@@ -80,8 +82,51 @@ fn print_usage(usage: &Usage) {
     }
 }
 
+fn print_help() {
+    println!(r#"yoyo — a coding agent that grows up in public
+
+Usage:
+  ANTHROPIC_API_KEY=sk-... cargo run [options]
+
+Options:
+  --model <name>      Set model (default: anthropic/claude-3.5-sonnet)
+  --prompt-file <path> Run non-interactive with prompt file, then exit
+  --skills <dir>      Load skills from directory
+  --help              Show this help message
+  --version           Show version
+
+Commands (interactive):
+  /quit, /exit        Exit the agent
+  /clear              Clear conversation history
+  /model <name>       Switch model mid-session
+
+Environment variables:
+  ANTHROPIC_API_KEY   Anthropic API key
+  OPENROUTER_API_KEY  OpenRouter API key (default provider)
+  API_KEY             Fallback API key
+
+For more info, see: https://github.com/yologdev/yoyo-evolve
+"#);
+}
+
+fn print_version() {
+    println!("yoyo {}", env!("CARGO_PKG_VERSION"));
+}
+
 #[tokio::main]
 async fn main() {
+    let args: Vec<String> = std::env::args().collect();
+
+    // Handle --help and --version early, before any setup
+    if args.iter().any(|a| a == "--help") {
+        print_help();
+        return;
+    }
+    if args.iter().any(|a| a == "--version") {
+        print_version();
+        return;
+    }
+
     let cfg: Config = std::fs::read_to_string("config.toml")
         .ok()
         .and_then(|s| toml::from_str(&s).ok())
@@ -137,6 +182,7 @@ async fn main() {
     };
 
     let mut agent = Agent::new(OpenAiCompatProvider)
+        .with_model(&model)
         .with_model_config(make_model_config(&model))
         .with_api_key(&api_key)
         .with_system_prompt(SYSTEM_PROMPT)
@@ -170,7 +216,25 @@ async fn main() {
     let stdin = io::stdin();
     let mut lines = stdin.lock().lines();
 
+    // Flag to track Ctrl+C press
+    let interrupted = Arc::new(AtomicBool::new(false));
+    let interrupted_clone = interrupted.clone();
+
+    // Spawn a task to handle Ctrl+C
+    tokio::spawn(async move {
+        use tokio::signal::ctrl_c;
+        if ctrl_c().await.is_ok() {
+            interrupted_clone.store(true, Ordering::SeqCst);
+        }
+    });
+
     loop {
+        // Check if interrupted
+        if interrupted.load(Ordering::SeqCst) {
+            println!("\n{DIM}  (Ctrl+C — type /quit to exit){RESET}");
+            interrupted.store(false, Ordering::SeqCst);  // Reset for next time
+        }
+
         print!("{BOLD}{GREEN}> {RESET}");
         io::stdout().flush().ok();
 
@@ -188,6 +252,7 @@ async fn main() {
             "/quit" | "/exit" => break,
             "/clear" => {
                 agent = Agent::new(OpenAiCompatProvider)
+                    .with_model(&model)
                     .with_model_config(make_model_config(&model))
                     .with_api_key(&api_key)
                     .with_system_prompt(SYSTEM_PROMPT)
@@ -199,6 +264,7 @@ async fn main() {
             s if s.starts_with("/model ") => {
                 let new_model = s.trim_start_matches("/model ").trim();
                 agent = Agent::new(OpenAiCompatProvider)
+                    .with_model(new_model)
                     .with_model_config(make_model_config(new_model))
                     .with_api_key(&api_key)
                     .with_system_prompt(SYSTEM_PROMPT)
@@ -345,5 +411,19 @@ mod tests {
     #[test]
     fn test_truncate_empty() {
         assert_eq!(truncate("", 5), "");
+    }
+
+    // Note: print_help() and print_version() are tested via --help and --version CLI flags
+    // They don't return values, so we verify they don't panic
+    #[test]
+    fn test_help_does_not_panic() {
+        // Should not panic
+        print_help();
+    }
+
+    #[test]
+    fn test_version_does_not_panic() {
+        // Should not panic
+        print_version();
     }
 }
