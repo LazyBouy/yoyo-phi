@@ -136,7 +136,7 @@ async fn main() {
         .or_else(|| std::env::var("OPENROUTER_API_KEY").ok())
         .or_else(|| std::env::var("API_KEY").ok())
         .or_else(|| std::env::var("ANTHROPIC_API_KEY").ok())
-        .expect("Set OPENROUTER_API_KEY, API_KEY, or ANTHROPIC_API_KEY");
+        .expect("ERROR: No API key found. Set one of: OPENROUTER_API_KEY, API_KEY, or ANTHROPIC_API_KEY");
 
     let args: Vec<String> = std::env::args().collect();
 
@@ -161,10 +161,9 @@ async fn main() {
         .filter_map(|(i, _)| args.get(i + 1).cloned())
         .collect();
 
-    let skills = if skill_dirs.is_empty() {
-        SkillSet::empty()
-    } else {
-        SkillSet::load(&skill_dirs).expect("Failed to load skills")
+    let skills = match skill_dirs.is_empty() {
+        true => SkillSet::empty(),
+        false => SkillSet::load(&skill_dirs).expect("ERROR: Failed to load skills. Check --skills directory exists and is readable."),
     };
 
     let make_model_config = |m: &str| {
@@ -206,7 +205,7 @@ async fn main() {
     }
     println!(
         "{DIM}  cwd:   {}{RESET}\n",
-        std::env::current_dir().unwrap().display()
+        std::env::current_dir().map(|p| p.display().to_string()).unwrap_or_else(|_| "<unknown>".to_string())
     );
 
     // Non-interactive mode: send the whole file as one prompt, then exit.
