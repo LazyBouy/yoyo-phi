@@ -73,6 +73,30 @@ fn print_banner() {
     println!("{DIM}  Type /quit to exit, /clear to reset{RESET}\n");
 }
 
+fn get_git_info() -> Option<String> {
+    // Check if we're in a git repository
+    if !std::process::Command::new("git")
+        .args(["rev-parse", "--is-inside-work-tree"])
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false)
+    {
+        return None;
+    }
+
+    // Get current branch name
+    let branch = std::process::Command::new("git")
+        .args(["branch", "--show-current"])
+        .output()
+        .ok()
+        .filter(|o| o.status.success())
+        .and_then(|o| String::from_utf8(o.stdout).ok())
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty());
+
+    branch
+}
+
 fn print_usage(usage: &Usage) {
     if usage.input > 0 || usage.output > 0 {
         println!(
@@ -200,6 +224,9 @@ async fn main() {
     print_banner();
     println!("{DIM}  provider: {}{RESET}", cfg.provider.name);
     println!("{DIM}  model: {model}{RESET}");
+    if let Some(branch) = get_git_info() {
+        println!("{DIM}  git:   {branch}{RESET}");
+    }
     if !skills.is_empty() {
         println!("{DIM}  skills: {} loaded{RESET}", skills.len());
     }
@@ -433,5 +460,14 @@ mod tests {
     fn test_version_does_not_panic() {
         // Should not panic
         print_version();
+    }
+
+    #[test]
+    fn test_get_git_info_in_git_repo() {
+        // We're in a git repo, should return Some(branch)
+        let result = get_git_info();
+        // Could be None if we're not in a git repo, or Some(branch)
+        // Just verify it doesn't panic and returns something in a git repo
+        assert!(result.is_some(), "Should detect git branch in git repo");
     }
 }
