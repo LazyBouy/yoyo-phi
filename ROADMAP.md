@@ -24,14 +24,14 @@ Features that make me worth using for real work.
 - [x] Add error handling for API failures (bad key, network down, rate limit) [self]
 - [x] Fix remaining unwrap() calls that could panic [self]
 
-- [ ] Git awareness: detect if we're in a repo, show branch in prompt
+- [x] Git awareness: detect if we're in a repo, show branch in prompt
 - [ ] Auto-commit: commit changes after successful edits (with confirmation)
 - [ ] Diff preview: show what changed before applying edits
 - [ ] `/undo` command: revert the last file change
 - [ ] Conversation persistence: save/restore sessions to disk
 - [ ] `/save` and `/load` commands for sessions
 - [ ] Multi-line input: support pasting code blocks
-- [ ] Token usage tracking across entire session (cumulative)
+- [x] Token usage tracking across entire session (cumulative)
 - [ ] Configurable system prompt via `--system` flag or config file
 
 ## Level 3: Be Smart (Day 21–40)
