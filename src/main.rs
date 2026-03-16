@@ -103,6 +103,12 @@ async fn main() {
         .or_else(|| cfg.model.default.clone())
         .unwrap_or_else(|| "anthropic/claude-3.5-sonnet".into());
 
+    let prompt_file = args
+        .iter()
+        .position(|a| a == "--prompt-file")
+        .and_then(|i| args.get(i + 1))
+        .cloned();
+
     let skill_dirs: Vec<String> = args
         .iter()
         .enumerate()
@@ -148,6 +154,15 @@ async fn main() {
         std::env::current_dir().unwrap().display()
     );
 
+    // Non-interactive mode: send the whole file as one prompt, then exit.
+    if let Some(path) = prompt_file {
+        let prompt = std::fs::read_to_string(&path)
+            .unwrap_or_else(|e| panic!("Cannot read prompt file {path}: {e}"));
+        run_prompt(&mut agent, prompt.trim()).await;
+        println!("\n{DIM}  done{RESET}\n");
+        return;
+    }
+
     let stdin = io::stdin();
     let mut lines = stdin.lock().lines();
 
@@ -191,90 +206,94 @@ async fn main() {
             _ => {}
         }
 
-        let mut rx = agent.prompt(input).await;
-        let mut last_usage = Usage::default();
-        let mut in_text = false;
-
-        while let Some(event) = rx.recv().await {
-            match event {
-                AgentEvent::ToolExecutionStart {
-                    tool_name, args, ..
-                } => {
-                    if in_text {
-                        println!();
-                        in_text = false;
-                    }
-                    let summary = match tool_name.as_str() {
-                        "bash" => {
-                            let cmd = args
-                                .get("command")
-                                .and_then(|v| v.as_str())
-                                .unwrap_or("...");
-                            format!("$ {}", truncate(cmd, 80))
-                        }
-                        "read_file" => {
-                            let path = args.get("path").and_then(|v| v.as_str()).unwrap_or("?");
-                            format!("read {}", path)
-                        }
-                        "write_file" => {
-                            let path = args.get("path").and_then(|v| v.as_str()).unwrap_or("?");
-                            format!("write {}", path)
-                        }
-                        "edit_file" => {
-                            let path = args.get("path").and_then(|v| v.as_str()).unwrap_or("?");
-                            format!("edit {}", path)
-                        }
-                        "list_files" => {
-                            let path = args.get("path").and_then(|v| v.as_str()).unwrap_or(".");
-                            format!("ls {}", path)
-                        }
-                        "search" => {
-                            let pat = args.get("pattern").and_then(|v| v.as_str()).unwrap_or("?");
-                            format!("search '{}'", truncate(pat, 60))
-                        }
-                        _ => tool_name.clone(),
-                    };
-                    print!("{YELLOW}  ▶ {summary}{RESET}");
-                    io::stdout().flush().ok();
-                }
-                AgentEvent::ToolExecutionEnd { is_error, .. } => {
-                    if is_error {
-                        println!(" {RED}✗{RESET}");
-                    } else {
-                        println!(" {GREEN}✓{RESET}");
-                    }
-                }
-                AgentEvent::MessageUpdate {
-                    delta: StreamDelta::Text { delta },
-                    ..
-                } => {
-                    if !in_text {
-                        println!();
-                        in_text = true;
-                    }
-                    print!("{}", delta);
-                    io::stdout().flush().ok();
-                }
-                AgentEvent::AgentEnd { messages } => {
-                    for msg in messages.iter().rev() {
-                        if let AgentMessage::Llm(Message::Assistant { usage, .. }) = msg {
-                            last_usage = usage.clone();
-                            break;
-                        }
-                    }
-                }
-                _ => {}
-            }
-        }
-
-        if in_text {
-            println!();
-        }
-        print_usage(&last_usage);
-        println!();
+        run_prompt(&mut agent, input).await;
     }
 
     println!("\n{DIM}  bye 👋{RESET}\n");
+}
+
+async fn run_prompt(agent: &mut Agent, input: &str) {
+    let mut rx = agent.prompt(input).await;
+    let mut last_usage = Usage::default();
+    let mut in_text = false;
+
+    while let Some(event) = rx.recv().await {
+        match event {
+            AgentEvent::ToolExecutionStart {
+                tool_name, args, ..
+            } => {
+                if in_text {
+                    println!();
+                    in_text = false;
+                }
+                let summary = match tool_name.as_str() {
+                    "bash" => {
+                        let cmd = args
+                            .get("command")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("...");
+                        format!("$ {}", truncate(cmd, 80))
+                    }
+                    "read_file" => {
+                        let path = args.get("path").and_then(|v| v.as_str()).unwrap_or("?");
+                        format!("read {}", path)
+                    }
+                    "write_file" => {
+                        let path = args.get("path").and_then(|v| v.as_str()).unwrap_or("?");
+                        format!("write {}", path)
+                    }
+                    "edit_file" => {
+                        let path = args.get("path").and_then(|v| v.as_str()).unwrap_or("?");
+                        format!("edit {}", path)
+                    }
+                    "list_files" => {
+                        let path = args.get("path").and_then(|v| v.as_str()).unwrap_or(".");
+                        format!("ls {}", path)
+                    }
+                    "search" => {
+                        let pat = args.get("pattern").and_then(|v| v.as_str()).unwrap_or("?");
+                        format!("search '{}'", truncate(pat, 60))
+                    }
+                    _ => tool_name.clone(),
+                };
+                print!("{YELLOW}  ▶ {summary}{RESET}");
+                io::stdout().flush().ok();
+            }
+            AgentEvent::ToolExecutionEnd { is_error, .. } => {
+                if is_error {
+                    println!(" {RED}✗{RESET}");
+                } else {
+                    println!(" {GREEN}✓{RESET}");
+                }
+            }
+            AgentEvent::MessageUpdate {
+                delta: StreamDelta::Text { delta },
+                ..
+            } => {
+                if !in_text {
+                    println!();
+                    in_text = true;
+                }
+                print!("{}", delta);
+                io::stdout().flush().ok();
+            }
+            AgentEvent::AgentEnd { messages } => {
+                for msg in messages.iter().rev() {
+                    if let AgentMessage::Llm(Message::Assistant { usage, .. }) = msg {
+                        last_usage = usage.clone();
+                        break;
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    if in_text {
+        println!();
+    }
+    print_usage(&last_usage);
+    println!();
 }
 
 fn truncate(s: &str, max: usize) -> &str {
