@@ -7,7 +7,7 @@ license = "MIT"
 repository = "https://github.com/yologdev/yoyo-evolve"
 
 [dependencies]
-yoagent = "0.5"
+yoagent = "0.7"
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1", features = ["derive"] }
 toml = "0.8"
