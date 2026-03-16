@@ -18,6 +18,14 @@ TIMEOUT="${TIMEOUT:-600}"
 DAY=$(cat DAY_COUNT 2>/dev/null || echo 1)
 DATE=$(date +%Y-%m-%d)
 
+# Configure git credentials when running inside Docker (GH_TOKEN set as env var).
+# No-op in GitHub Actions where the checkout action handles this.
+if [ -n "${GH_TOKEN:-}" ]; then
+    git remote set-url origin "https://${GH_TOKEN}@github.com/${REPO}.git"
+    git config user.email "yoagent@users.noreply.github.com"
+    git config user.name "yoagent-evolve[bot]"
+fi
+
 echo "=== Day $DAY: $DATE ==="
 echo "Model: $MODEL"
 echo "Timeout: ${TIMEOUT}s"

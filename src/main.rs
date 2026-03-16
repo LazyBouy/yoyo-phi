@@ -13,12 +13,43 @@
 //!   /clear          Clear conversation history
 //!   /model <name>   Switch model mid-session
 
+use serde::Deserialize;
 use std::io::{self, BufRead, Write};
 use yoagent::agent::Agent;
-use yoagent::provider::AnthropicProvider;
+use yoagent::provider::{ApiProtocol, ModelConfig, OpenAiCompat, OpenAiCompatProvider};
 use yoagent::skills::SkillSet;
 use yoagent::tools::default_tools;
 use yoagent::*;
+
+#[derive(Deserialize, Default)]
+struct Config {
+    #[serde(default)]
+    provider: ProviderCfg,
+    #[serde(default)]
+    model: ModelCfg,
+}
+
+#[derive(Deserialize)]
+struct ProviderCfg {
+    name: String,
+    api_url: Option<String>,
+    api_key: Option<String>,
+}
+
+impl Default for ProviderCfg {
+    fn default() -> Self {
+        Self {
+            name: "openrouter".into(),
+            api_url: Some("https://openrouter.ai/api/v1".into()),
+            api_key: None,
+        }
+    }
+}
+
+#[derive(Deserialize, Default)]
+struct ModelCfg {
+    default: Option<String>,
+}
 
 // ANSI color helpers
 const RESET: &str = "\x1b[0m";
@@ -51,9 +82,16 @@ fn print_usage(usage: &Usage) {
 
 #[tokio::main]
 async fn main() {
-    let api_key = std::env::var("ANTHROPIC_API_KEY")
-        .or_else(|_| std::env::var("API_KEY"))
-        .expect("Set ANTHROPIC_API_KEY or API_KEY");
+    let cfg: Config = std::fs::read_to_string("config.toml")
+        .ok()
+        .and_then(|s| toml::from_str(&s).ok())
+        .unwrap_or_default();
+
+    let api_key = cfg.provider.api_key.clone()
+        .or_else(|| std::env::var("OPENROUTER_API_KEY").ok())
+        .or_else(|| std::env::var("API_KEY").ok())
+        .or_else(|| std::env::var("ANTHROPIC_API_KEY").ok())
+        .expect("Set OPENROUTER_API_KEY, API_KEY, or ANTHROPIC_API_KEY");
 
     let args: Vec<String> = std::env::args().collect();
 
@@ -62,7 +100,8 @@ async fn main() {
         .position(|a| a == "--model")
         .and_then(|i| args.get(i + 1))
         .cloned()
-        .unwrap_or_else(|| "claude-opus-4-6".into());
+        .or_else(|| cfg.model.default.clone())
+        .unwrap_or_else(|| "anthropic/claude-3.5-sonnet".into());
 
     let skill_dirs: Vec<String> = args
         .iter()
@@ -77,14 +116,29 @@ async fn main() {
         SkillSet::load(&skill_dirs).expect("Failed to load skills")
     };
 
-    let mut agent = Agent::new(AnthropicProvider)
-        .with_system_prompt(SYSTEM_PROMPT)
-        .with_model(&model)
+    let make_model_config = |m: &str| ModelConfig {
+        id: m.to_string(),
+        name: m.to_string(),
+        api: ApiProtocol::OpenAiCompletions,
+        provider: cfg.provider.name.clone(),
+        base_url: cfg.provider.api_url.clone().unwrap_or_else(|| "https://openrouter.ai/api/v1".into()),
+        reasoning: false,
+        context_window: 128_000,
+        max_tokens: 4096,
+        cost: yoagent::provider::CostConfig::default(),
+        headers: std::collections::HashMap::new(),
+        compat: Some(OpenAiCompat::openrouter()),
+    };
+
+    let mut agent = Agent::new(OpenAiCompatProvider)
+        .with_model_config(make_model_config(&model))
         .with_api_key(&api_key)
+        .with_system_prompt(SYSTEM_PROMPT)
         .with_skills(skills.clone())
         .with_tools(default_tools());
 
     print_banner();
+    println!("{DIM}  provider: {}{RESET}", cfg.provider.name);
     println!("{DIM}  model: {model}{RESET}");
     if !skills.is_empty() {
         println!("{DIM}  skills: {} loaded{RESET}", skills.len());
@@ -114,10 +168,10 @@ async fn main() {
         match input {
             "/quit" | "/exit" => break,
             "/clear" => {
-                agent = Agent::new(AnthropicProvider)
-                    .with_system_prompt(SYSTEM_PROMPT)
-                    .with_model(&model)
+                agent = Agent::new(OpenAiCompatProvider)
+                    .with_model_config(make_model_config(&model))
                     .with_api_key(&api_key)
+                    .with_system_prompt(SYSTEM_PROMPT)
                     .with_skills(skills.clone())
                     .with_tools(default_tools());
                 println!("{DIM}  (conversation cleared){RESET}\n");
@@ -125,10 +179,10 @@ async fn main() {
             }
             s if s.starts_with("/model ") => {
                 let new_model = s.trim_start_matches("/model ").trim();
-                agent = Agent::new(AnthropicProvider)
-                    .with_system_prompt(SYSTEM_PROMPT)
-                    .with_model(new_model)
+                agent = Agent::new(OpenAiCompatProvider)
+                    .with_model_config(make_model_config(new_model))
                     .with_api_key(&api_key)
+                    .with_system_prompt(SYSTEM_PROMPT)
                     .with_skills(skills.clone())
                     .with_tools(default_tools());
                 println!("{DIM}  (switched to {new_model}, conversation cleared){RESET}\n");

@@ -1,0 +1,11 @@
+services:
+  yoyo-phi:
+    build: .
+    volumes:
+      - .:/app                                   # Bind-mount repo — agent can modify its own src/
+      - cargo-cache:/usr/local/cargo/registry    # Persist downloaded crates across runs
+    env_file: .env
+    working_dir: /app
+
+volumes:
+  cargo-cache:
