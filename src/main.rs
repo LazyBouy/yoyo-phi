@@ -158,7 +158,11 @@ async fn main() {
     if let Some(path) = prompt_file {
         let prompt = std::fs::read_to_string(&path)
             .unwrap_or_else(|e| panic!("Cannot read prompt file {path}: {e}"));
-        run_prompt(&mut agent, prompt.trim()).await;
+        let prompt = prompt.trim();
+        println!("{DIM}─── prompt ({} chars, {} lines) ───{RESET}", prompt.len(), prompt.lines().count());
+        println!("{DIM}{}{RESET}", prompt);
+        println!("{DIM}─── end prompt ───{RESET}\n");
+        run_prompt(&mut agent, prompt).await;
         println!("\n{DIM}  done{RESET}\n");
         return;
     }
@@ -216,12 +220,15 @@ async fn run_prompt(agent: &mut Agent, input: &str) {
     let mut rx = agent.prompt(input).await;
     let mut last_usage = Usage::default();
     let mut in_text = false;
+    let mut tool_calls: usize = 0;
+    let mut text_chars: usize = 0;
 
     while let Some(event) = rx.recv().await {
         match event {
             AgentEvent::ToolExecutionStart {
                 tool_name, args, ..
             } => {
+                tool_calls += 1;
                 if in_text {
                     println!();
                     in_text = false;
@@ -270,6 +277,7 @@ async fn run_prompt(agent: &mut Agent, input: &str) {
                 delta: StreamDelta::Text { delta },
                 ..
             } => {
+                text_chars += delta.len();
                 if !in_text {
                     println!();
                     in_text = true;
@@ -293,6 +301,13 @@ async fn run_prompt(agent: &mut Agent, input: &str) {
         println!();
     }
     print_usage(&last_usage);
+    println!(
+        "{DIM}  summary: {} tool call(s), {} text chars{RESET}",
+        tool_calls, text_chars
+    );
+    if tool_calls == 0 && text_chars == 0 {
+        println!("{RED}  ⚠ model returned no output — check API key, model name, or provider status{RESET}");
+    }
     println!();
 }
 
